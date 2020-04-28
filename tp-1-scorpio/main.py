@@ -141,7 +141,7 @@ materials = {
     'titanium': Material(4500, 114, 0.34)
 }
 
-def generation_population():
+def generate_population():
 
 
 
