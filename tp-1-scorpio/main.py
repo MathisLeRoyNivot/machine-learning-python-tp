@@ -1,251 +1,176 @@
-import math
-import numpy as np
-import random as rd
-import matplotlib.pyplot as plt
+from prettytable import PrettyTable
+from random import randrange, uniform, random, choice
+
+from Arrow import *
+from Launch import *
+from Material import *
+from Scorpio import *
 
 EARTH_GRAVITY_CONST = 9.81
 MOON_GRAVITY_CONST = 1.62
 JUPITER_GRAVITY_CONST = 24.80
-GENERATED_POPULATION_AMOUNT = 20
+
+PROBABILITY_TO_MUTATE = 0.1
+PROBABILITY_TO_KEEP_GRATED = 0.2
+PROBABILITY_TO_KEEP_NON_GRATED = 0.05
+POPULATION_AMOUNT = 500
+GENERATION_MAX_AMOUNT = 100
+FITNESS_MAX = 100
+
+EXPECTED_ENERGY = input('Energy in joules you want to reach: ')
+BEST_GRADED_PERCENTAGE = int(POPULATION_AMOUNT * PROBABILITY_TO_KEEP_GRATED)
 
 
-class Scorpio:
-    def __init__(self, arm_lenght, arm_base, arm_height, string_lenght, young_mod, poisson_ratio, degree_angle, gravity, density, arrow_base, arrow_height, arrow_lenght, arrow):
-        self._arm_lenght = arm_lenght
-        self._arm_base = arm_base
-        self._arm_height = arm_height
-        self._string_lenght = string_lenght
-        self._young_mod = young_mod
-        self._poisson_ratio = poisson_ratio
-        self._degree_angle = degree_angle
-        self._gravity = gravity
-        self._density = density
-        self._arrow_lenght = arrow_lenght
-        self._arrow_base = arrow_base
-        self._arrow_height = arrow_height
-        self._fitness = 0
-
-    
-    # Spring constant with Hooke's law
-    def spring_constant(self, velocity):
-        young_modulus = self._young_mod.youngMod()
-        if velocity != 0.5:
-            k = (1 / 3) * young_modulus / (1 - 2 * velocity)
-            return k
-        return -1
-
-    
-    # Empty lenght
-    def empty_lenght(self, lb, lc):
-        lv = (1 / 2) * (lb ** 2 - lc ** 2) ** (1/2)
-        return lv
+# Get Random population
+def generate_random_population():
+    return [get_random_launch(get_random_scorpio(get_random_arrow()), EARTH_GRAVITY_CONST) for _ in
+            range(POPULATION_AMOUNT)]
 
 
-    # Move lenght
-    def move_lenght(self, lf, lv):
-        ld = lf - lv
-        return ld
+# Get Individual Fitness
+def get_fitness(launch):
+    fitness = 100 / (abs(float(EXPECTED_ENERGY) - float(launch.impact_energy)) + 1)
+    return fitness
 
 
-    # Velocity in m.s^-1
-    def velocity(self, k, dist, mass):
-        if mass > 0:         
-            v = (k * dist ** 2 / mass) ** (1/2)
-            return v
-        return -1
+# Get average Fitness
+def get_average_fitness(population):
+    totalFitness = 0
+    for launch in population:
+        totalFitness += get_fitness(launch)
+    return totalFitness / POPULATION_AMOUNT
 
 
-    # Range in meters
-    def scorpio_range(self, velocity, g, degree_angle):
-        if g != 0 and 0 <= degree_angle <= 90:
-            radian_angle = math.radians(degree_angle)
-            r = (velocity ** 2 / g) * math.sin(2 * radian_angle)
-            return r
-        return -1
-
-    
-    # KE w/ mass of object in kg and velocity in m.s^-1
-    def kinetic_energy(self, mass, velocity):
-        ke = (1 / 2) * mass * velocity ** 2
-        return ke
+# Sort population
+def rank_population(population):
+    ranked_population = []
+    for launch in population:
+        ranked_population.append((launch, get_fitness(launch)))
+    return sorted(ranked_population, key=lambda x: x[1], reverse=True)
 
 
-    # Equivalence Joule energy
-    def joule_energy(self, ke):
-        tnt_energy = ke / 4184
-        return tnt_energy
+# Make population evolve for 1 generation
+def evolve_population(population):
+    # Retrieve ranked Population
+    sorted_population = rank_population(population)
+    average_fitness = 0
+    solution = []
+    ranked_population = []
+
+    # Give grade and get average grade
+    for launch, fitness in sorted_population:
+        average_fitness += fitness
+        ranked_population.append(launch)
+        if fitness >= (FITNESS_MAX - 0.01):  # Child will be near to perfect FITNESS_MAX but never equal
+            solution.append(launch)
+    average_fitness /= POPULATION_AMOUNT
+
+    # End the script when solution is found
+    if solution:
+        return population, average_fitness, solution
+
+    # Keep Best ranked launches
+    parents = ranked_population[:BEST_GRADED_PERCENTAGE]
+
+    # Add some random launches
+    for launch in ranked_population[BEST_GRADED_PERCENTAGE:]:
+        if random() < PROBABILITY_TO_KEEP_NON_GRATED:
+            parents.append(launch)
+
+    # Random mutation in population
+    for launch in parents:
+        if random() < PROBABILITY_TO_MUTATE:
+            launch = get_random_launch(get_random_scorpio(get_random_arrow()), EARTH_GRAVITY_CONST)
+
+    # Crossover
+    wanted_length = POPULATION_AMOUNT - len(parents)
+    children = []
+    while len(children) < wanted_length:
+        parent_scorpio_1 = choice(parents)
+        parent_scorpio_2 = choice(parents)
+
+        # Create new Arrow
+        child_arrow = Arrow(
+            parent_scorpio_1.scorpio.arrow.material,
+            round(uniform(parent_scorpio_1.scorpio.arrow.length, parent_scorpio_2.scorpio.arrow.length),
+                  arrow_data['length']['precision']),
+            round(uniform(parent_scorpio_1.scorpio.arrow.diameter, parent_scorpio_2.scorpio.arrow.diameter),
+                  arrow_data['diameter']['precision'])
+        )
+
+        # Create new Scorpio
+        child_scorpio = Scorpio(
+            child_arrow,
+            parent_scorpio_2.scorpio.material,
+            round(uniform(parent_scorpio_1.scorpio.arm_length, parent_scorpio_2.scorpio.arm_length),
+                  scorpio_data['arm_length']['precision']),
+            round(uniform(parent_scorpio_1.scorpio.arm_base, parent_scorpio_2.scorpio.arm_base),
+                  scorpio_data['arm_base']['precision']),
+            round(uniform(parent_scorpio_1.scorpio.arm_height, parent_scorpio_2.scorpio.arm_height),
+                  scorpio_data['arm_height']['precision']),
+            round(uniform(parent_scorpio_1.scorpio.string_length, parent_scorpio_2.scorpio.string_length),
+                  scorpio_data['string_length']['precision']),
+            round(uniform(parent_scorpio_1.scorpio.angle, parent_scorpio_2.scorpio.angle), scorpio_data['angle']['precision'])
+        )
+
+        # Create new Launch
+        child_launch = Launch(
+            child_scorpio,
+            EARTH_GRAVITY_CONST
+        )
+
+        child = child_launch
+        children.append(child)
+
+    parents.extend(children)
+    return parents, average_fitness, solution
 
 
-ROUNDED_ARROW_TYPE = "rounded"
-SQUARED_ARROW_TYPE = "squared"
-
-
-class Arrow:
-    def __init__(self, type, density, arrow_base, arrow_height, arrow_lenght, diameter):
-        self._type = type
-        self._density = density
-        self._arrow_base = arrow_base
-        self._arrow_height = arrow_height
-        self._arrow_lenght = arrow_lenght
-        self._diameter = diameter
-
-    @property
-    def type(self):
-        return self._type
-    
-
-    @type.setter
-    def setType(self, value):
-        self._type = value
-
-
-    def getArrowMass(self):        
-        if self._type == ROUNDED_ARROW_TYPE :
-            return self.squared_projectile_mass()
-        elif self._type == SQUARED_ARROW_TYPE and self._diameter > 0:
-            return self.rouded_projectile_mass()
-
-
-    # Object mass depending on type
-    def squared_projectile_mass(self):
-        mass = self._density * self._arrow_base * self._arrow_height * self._arrow_lenght
-        return mass
-
-
-    def rouded_projectile_mass(self):
-        if self._diameter > 0:
-            mass = self._density * math.pi * (self._diameter / 2) ** 2 * self._arrow_lenght
-            return mass
-        return -1
-
-
-class Material:
-    def __init__(self, mass, young_mod, poisson_ratio):
-        self._mass = mass
-        self._young_mod = young_mod
-        self._poisson_ratio = poisson_ratio
-
-    @property
-    def mass(self):
-        return self._mass
-    
-    @mass.setter
-    def setMass(self, value):
-        self._mass = value
-
-    @property
-    def youngMod(self):
-        return self._young_mod
-    
-    @youngMod.setter
-    def setYoundMod(self, value):
-        self._young_mod = value
-
-    @property
-    def poissonRatio(self):
-        return self._poisson_ratio
-    
-    @poissonRatio.setter
-    def setPoissonRatio(self, value):
-        self._poisson_ratio = value
-
-
-# ------------------------------------------------------------------------------------------
-AVAILABLE_MATERIALS = {
-    'steel': Material(7850, 210, 0.27),
-    'aluminum': Material(2700, 62, 0.29),
-    'silver': Material(10500, 78, 0),
-    'wood': Material(800, 12, 0),
-    'bamboo': Material(0, 20, 0),
-    'bronze': Material(8740, 110, 0),
-    'diamond': Material(3517, 1220, 0),
-    'iron': Material(7860, 208, 0.25),
-    'or': Material(18900, 78, 0.42),
-    'platinum': Material(21450, 170, 0),
-    'titanium': Material(4500, 114, 0.34)
-}
-
-populations = []
-
-def generate_population():
-    print("Generating populations...")
-    for i in range(GENERATED_POPULATION_AMOUNT):
-        Materiau = rd.choice(AVAILABLE_MATERIALS)
-        populations.append(
-            Scorpio(rd.randrange(0, 100, 1), rd.randrange(0, 100, 1), Materiau.module_young,
-                                   Materiau.coef_poisson, rd.randrange(0, 90, 1), 9.81, Materiau.masse_volumique, rd.randrange(0, 100, 1)/100, rd.randrange(0, 100, 1)/100, rd.randrange(0, 100, 1), rd.randrange(0, 100, 1), rd.randrange(0, 100, 1))
-            )
-
-
-def set_fitnesses():
-    for population in populations:
-        if(population.is_tir() == True):
-            population.fitness = population.energie_impact() * population.scorpio_range() * 2
-        else:
-            population.fitness = 0
-
-
-def selection():
-    populations.sort(key=lambda x: x.fitness, reverse=True)
-    for x in range(round(GENERATED_POPULATION_AMOUNT / 2), GENERATED_POPULATION_AMOUNT - 1):
-        del populations[round(GENERATED_POPULATION_AMOUNT / 2)]
-
-
-def croisements():
-    probs = [i.fitness for i in populations]
-    probs /= np.sum(probs)
-    nouvelle_population = []
-    for pop in populations:
-        scorpion2 = np.random.choice(populations, p=probs)
-        bebe_scorpion = croisement(pop, scorpion2)
-        nouvelle_population.append(bebe_scorpion)
-        while True:
-            scorpion3 = np.random.choice(populations, p=probs)
-            if(scorpion3.fitness != scorpion2.fitness):
-                bebe_scorpion2 = croisement(pop, scorpion3)
-                if(bebe_scorpion2 not in nouvelle_population):
-                    nouvelle_population.append(bebe_scorpion2)
-                    break
-
-    return nouvelle_population
-
-
-def croisement(scorpio1, scorpio2):
-    return Scorpio(scorpio1.longueur_bras, scorpio1.longueur_corde, scorpio1.module_young, scorpio1.coef_poisson, scorpio1.angle_deg, scorpio1.gravite, scorpio1.masse_volumique, scorpio2.base_fleche, scorpio2.hauteur_fleche, scorpio2.longueur_fleche, scorpio2.base_bras, scorpio2.hauteur_bras)
-
-
-def mutations():
-    for i in range(0, len(populations)-1):
-        if(decision(0.5)):
-            populations[i].longueur_corde += 1
-
-
-def afficher_population(i):
-    print(f'POPULATION #{i}: {avg_fitness()} / {max_fitness()}')
-    # for pop in populations:
-    # print(pop.fitness)
-
-
-def decision(probability):
-    return rd.random() < probability
-
-
-def max_fitness():
-    fitnesses = [i.fitness for i in populations]
-    return np.amax(fitnesses)
-
-
-def avg_fitness():
-    fitnesses = [i.fitness for i in populations]
-    return np.mean(fitnesses)
-
-
+# Main program
 def main():
-    print("🟢 Starting...")
-    # plt.scatter(x, y)
+    population = generate_random_population()  # Generate initial population
+    average_fitness = get_average_fitness(population)  # Give grades to population
 
-    print("🔴 Program ended")
+    # Evolve
+    i = 0
+    solution = None
+    average_fitness_log = []
+    while not solution and i < GENERATION_MAX_AMOUNT:
+        population, average_fitness, solution = evolve_population(population)
+        print(f'Generation {i} has a fitness of: {round(average_fitness / FITNESS_MAX * 100, 2)}%')
+        average_fitness_log.append(round(average_fitness, 2))
+        i += 1
+
+    print(f'Final average fitness: {round(average_fitness / FITNESS_MAX * 100, 2)}%')  # Print the final stats
+
+    # Print the solution
+    if solution:
+        x = PrettyTable()
+        y = PrettyTable()
+
+        print(f'Ideal Scorpio found after {i} generations with a fitness : {get_fitness(solution[0])}%.')
+        print('Ideal Scorpio: ')
+        x.field_names = ["Property", "Value"]
+        x.add_row(["Material", str(solution[0].scorpio.material.name)])
+        x.add_row(["Arm length", str(solution[0].scorpio.arm_length)])
+        x.add_row(["Arm base", str(solution[0].scorpio.arm_base)])
+        x.add_row(["Arm height", str(solution[0].scorpio.arm_height)])
+        x.add_row(["String length", str(solution[0].scorpio.string_length)])
+        x.add_row(["Shoot angle", str(solution[0].scorpio.angle)])
+        print(x)
+
+        print('Ideal Arrow: ')
+        y.field_names = x.field_names
+        y.add_row(["Material", str(solution[0].arrow.material.name)])
+        y.add_row(["Length", str(solution[0].arrow.length)])
+        y.add_row(["Diameter", str(solution[0].arrow.diameter)])
+        print(y)
+    else:
+        print(f'No solution found after {i} generations.')
+        print('- Last population was:')
+        for number, launch in enumerate(population):
+            print(number, '->', ''.join(launch))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

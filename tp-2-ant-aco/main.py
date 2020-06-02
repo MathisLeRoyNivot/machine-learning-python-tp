@@ -7,7 +7,7 @@ import numpy as np
 
 NODE_MAX_QTY = 50
 CENTRALISATION_MAX = (NODE_MAX_QTY / 2)
-MAX_LENGHT_AMOUNT = 100
+MAX_LENGTH_AMOUNT = 100
 
 TRY_AMOUNT = 100
 ANT_QTY = 100
@@ -25,7 +25,7 @@ def init():
     # Generate random edges based on random start and end node with random 'length'
     for x in range(NODE_MAX_QTY):
         G.add_edge(rand.randrange(0, CENTRALISATION_MAX), rand.randrange(
-            0, CENTRALISATION_MAX), length=rand.randrange(0, MAX_LENGHT_AMOUNT), pheromone=1)
+            0, CENTRALISATION_MAX), length=rand.randrange(0, MAX_LENGTH_AMOUNT), pheromone=1)
 
 
 def launch():
